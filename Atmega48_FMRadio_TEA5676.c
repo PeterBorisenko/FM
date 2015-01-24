@@ -26,6 +26,14 @@
 #define BL PINB4 // PCINT4
 #define BU PINB5 // PCINT5
 
+// Прескалер для ШИМ
+#define TIM0PSC 0x04
+
+// Переменные из памяти
+volatile static uint8_t StoredVOL= 0;
+volatile static uint8_t StoredCHAN= 1;
+volatile static uint8_t StroredFREQ= 0x00;
+
 int main(void)
 {
 	PowerReduction();
@@ -48,6 +56,10 @@ void VOLUME_init() {
 	BIT_clear(VOLreg, VOLpin); //VOL - output
 	BIT_clear(VOLport, VOLpin);  //VOL = 0 
 	//TODO: PWM set up
+	TCCR0A|= (WGM00 << 0x03); // FAST PWM Mode
+	TCCR0A|= (1 << COM0B1); // Clear OC0B on compare match, set OC0B at BOTTOM (non-inverting PWM mode)
+	OCR0B= StoredVOL; // Volume 0
+	TCCR0B|= (CS00 << TIM0PSC); // Prescaler set and turn timer ON
 }
 
 void BUTTON_init() {
@@ -58,7 +70,7 @@ void BUTTON_init() {
 }
 
 void PowerReduction() {
-	PRR|= (1 << PRSPI)|(1 << PRADC)|(1 << PRUSART0)|(1 << PRTIM1)|(1 << PRTIM0);
+	PRR|= (1 << PRSPI)|(1 << PRADC)|(1 << PRUSART0)|(1 << PRTIM1);
 }
 
 ISR(PCINT0_vect) {
