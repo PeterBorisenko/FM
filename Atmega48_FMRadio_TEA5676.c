@@ -26,6 +26,11 @@
 #define BL PINB4 // PCINT4
 #define BU PINB5 // PCINT5
 
+// TWI predefines
+#define SCL_FREQ	400_000UL
+#define TWI_PSK		1
+#define TWI_BR		((((F_CPU/SCL_FREQ)-16)/2)/TWI_PSK)
+
 // Прескалер для ШИМ
 #define TIM0PSC 0x04
 
@@ -36,10 +41,10 @@ volatile static uint8_t StroredFREQ= 0x00;
 
 int main(void)
 {
-	PowerReduction();
-	//i2c_init();
-	VOLUME_init();
-	BUTTON_init();
+	powerReduction();
+	i2cInit();
+	volumeInit();
+	buttonInit();
 	LCD_Init();
 	//EEPROM_init();
 	
@@ -52,7 +57,20 @@ int main(void)
     }
 }
 
-void VOLUME_init() {
+void i2cInit() {
+	TWBR= TWI_BR;
+	TWCR|= (1 << TWEN);
+}
+
+void i2cStart() {
+	TWCR|= (1 << TWSTA);
+}
+
+void i2cStop() {
+	TWCR|= (1 << TWSTO);
+}
+
+void volumeInit() {
 	BIT_clear(VOLreg, VOLpin); //VOL - output
 	BIT_clear(VOLport, VOLpin);  //VOL = 0 
 	//TODO: PWM set up
@@ -62,15 +80,23 @@ void VOLUME_init() {
 	TCCR0B|= (CS00 << TIM0PSC); // Prescaler set and turn timer ON
 }
 
-void BUTTON_init() {
+void buttonInit() {
 	BUTTONreg&= ~(1 << BB)& ~(1 << BU)& ~(1 << BL)& ~(1 << BC)& ~(1 << BR); // Buttons is inputs
 	BUTTONport|= (1 << BB)|(1 << BU)|(1 << BL)|(1 << BC)|(1 << BR); // with Pull-UP
 	PCICR= 0b001; // Pin change on PCINT7..0 enabled
 	PCMSK0|= (1 << BB)|(1 << BU)|(1 << BL)|(1 << BC)|(1 << BR); // Unmask corresponding button's interrupts
 }
 
-void PowerReduction() {
+void powerReduction() {
 	PRR|= (1 << PRSPI)|(1 << PRADC)|(1 << PRUSART0)|(1 << PRTIM1);
+}
+
+void sleep() {
+	
+}
+
+void wakeUp() {
+	
 }
 
 ISR(PCINT0_vect) {
