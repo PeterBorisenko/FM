@@ -4,13 +4,12 @@
  * Created: 23.01.2015 19:41:03
  *  Author: Disgust
  */ 
-
+#define F_CPU 8000000UL
 
 #include <avr/io.h>
 #include "src/Defines.h"
 #include "src/LCD.h"
-
-#define F_CPU 8_000_000UL
+#include "src/TEA5676_.h"
 
 // Определение выхода для управления громкостью
 #define VOLport PORTB
@@ -26,48 +25,52 @@
 #define BL PINB4 // PCINT4
 #define BU PINB5 // PCINT5
 
-// TWI predefines
-#define SCL_FREQ	400_000UL
-#define TWI_PSK		1
-#define TWI_BR		((((F_CPU/SCL_FREQ)-16)/2)/TWI_PSK)
-
 // Прескалер для ШИМ
 #define TIM0PSC 0x04
 
 // Переменные из памяти
 volatile static uint8_t StoredVOL= 0;
-volatile static uint8_t StoredCHAN= 1;
 volatile static uint8_t StroredFREQ= 0x00;
+
+// Переменные для TEA5676
+Smessage_t Config;
+Rmessage_t Status;
 
 int main(void)
 {
-	powerReduction();
 	i2cInit();
 	volumeInit();
+	//EEPROM_init();
 	buttonInit();
 	LCD_Init();
-	//EEPROM_init();
+	TEA5676Init();
 	
+	powerReduction();
 	sei();
     while(1)
     {
-        //TODO: Menu handler
+		//TODO: Menu handler
 		
 		//TODO: Command sending func that sends only if anything changes 
     }
 }
 
-void i2cInit() {
-	TWBR= TWI_BR;
-	TWCR|= (1 << TWEN);
-}
-
-void i2cStart() {
-	TWCR|= (1 << TWSTA);
-}
-
-void i2cStop() {
-	TWCR|= (1 << TWSTO);
+void TEA5676Init() {
+	i2cStart();
+	while (!(TWCR&~(1 << TWINT))); // wait while TWIN==1 and TWSTA==0
+	i2cWrite(&TEA_W); // send SLA_W
+	while (!(TWCR&~(1 << TWINT)));
+	i2cWrite(Config->b1);
+	while (!(TWCR&~(1 << TWINT)));
+	i2cWrite(Config->b2);
+	while (!(TWCR&~(1 << TWINT)));
+	i2cWrite(Config->b3);
+	while (!(TWCR&~(1 << TWINT)));
+	i2cWrite(Config->b4);
+	while (!(TWCR&~(1 << TWINT)));
+	i2cWrite(Config->b5);
+	while (!(TWCR&~(1 << TWINT)));
+	i2cStop();
 }
 
 void volumeInit() {
@@ -101,5 +104,10 @@ void wakeUp() {
 
 ISR(PCINT0_vect) {
 	//TODO: Button handler
+	return;
+}
+
+ISR(TWI_vect) {
+	
 	return;
 }
