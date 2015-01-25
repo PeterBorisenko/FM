@@ -60,15 +60,15 @@ void TEA5676Init() {
 	while (!(TWCR&~(1 << TWINT))); // wait while TWIN==1 and TWSTA==0
 	i2cWrite(&TEA_W); // send SLA_W
 	while (!(TWCR&~(1 << TWINT)));
-	i2cWrite(Config->b1);
+	i2cWrite(Config.b1);
 	while (!(TWCR&~(1 << TWINT)));
-	i2cWrite(Config->b2);
+	i2cWrite(Config.b2);
 	while (!(TWCR&~(1 << TWINT)));
-	i2cWrite(Config->b3);
+	i2cWrite(Config.b3);
 	while (!(TWCR&~(1 << TWINT)));
-	i2cWrite(Config->b4);
+	i2cWrite(Config.b4);
 	while (!(TWCR&~(1 << TWINT)));
-	i2cWrite(Config->b5);
+	i2cWrite(Config.b5);
 	while (!(TWCR&~(1 << TWINT)));
 	i2cStop();
 }
@@ -108,6 +108,6 @@ ISR(PCINT0_vect) {
 }
 
 ISR(TWI_vect) {
-	
+	i2cHandler();
 	return;
 }
