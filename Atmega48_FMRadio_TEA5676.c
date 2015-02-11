@@ -31,10 +31,12 @@
 #define TIM0PSC 0x04
 
 // Переменные из памяти
+volatile static uint8_t Custom;				// if custom == 0 - load factory defaults, if custom == 1 - load stored config 
 volatile static uint8_t StoredVOL= 0;
 volatile static uint8_t StroredFREQ= 0x00;
-volatile static uint8_t backlightLevel= 128;
-volatile static uint8_t LIT_TMOUT= 255;  // Backlight timeout
+volatile static uint8_t StoredChannels[30];
+volatile static uint8_t BacklightLevel= 128;
+volatile static uint8_t LightOffTimeout= 255;  // Backlight timeout
 
 
 
@@ -52,7 +54,6 @@ typedef enum{
 	} state_t;
 
 volatile static state_t devState;
-
 
 volatile static uint8_t timestamp[5];
 volatile static const uint8_t numBtns= 5;
@@ -83,10 +84,11 @@ void goMenu2();
 
 int main(void)
 {
-	
 	i2cInit();
 	volumeInit();
 	//EEPROM_init();
+	//Custom= EEloadCustom();
+	//EEloadSettings(Custom);
 	buttonInit();
 	LCD_Init();
 	powerReduction();
@@ -101,7 +103,7 @@ int main(void)
 		if (changes)
 		{
 			TEA5676sendConfig();
-			timeout= LIT_TMOUT;
+			timeout= LightOffTimeout;
 		}
 		
 		//TEA5676readConfig();
@@ -203,10 +205,9 @@ ISR(PCINT0_vect) {
 		setLed(backlightLevel);
 		devState= DEV_UPPER;
 	}
-	else if(devState == DEV_UPPER) {
-		for (uint8_t i= numBtns; i >= 0; i--)
-		{
-			//if(BIT_read(changedDown, i)) {// from HI to LO //TODO: define rise/fall check
+	else {
+		for (uint8_t i= numBtns; i >= 0; i--) { //TODO: Just change states and write active buttons
+			//if(BIT_read(changedDown, i)) {// from HI to LO
 			//	timestamp[i]= 0;
 			//if(BIT_read(changedUp, i))
 			//	if(timestamp[i] < longPushTime) {
@@ -218,22 +219,6 @@ ISR(PCINT0_vect) {
 			//}
 		}
 	}
-	else if(devState == DEV_MENU1) {
-		for (uint8_t i= numBtns; i >= 0; i--)
-		{
-			//if(BIT_read(changedDown, i)) {// from HI to LO //TODO: define rise/fall check
-			//	timestamp[i]= 0;
-			//if(BIT_read(changedUp, i))
-			//	if(timestamp[i] < longPushTime) {
-			//		pushLong(button); // buttons defined in the head of file
-			//  }
-			//  else {
-			//		push(button);
-			//	}
-			//}
-		}
-	}
-
 	return;
 }
 
