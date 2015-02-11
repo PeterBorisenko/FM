@@ -44,6 +44,7 @@ volatile static uint8_t LightOffTimeout= 255;  // Backlight timeout
 Smessage_t Config;
 Rmessage_t Status;
 
+
 // Global device state type and variable...
 typedef enum{
 	DEV_SLEEP,
@@ -55,11 +56,20 @@ typedef enum{
 
 volatile static state_t devState;
 
+const numBtns= 5;
 volatile static uint8_t timestamp[5];
-volatile static const uint8_t numBtns= 5;
 volatile static uint8_t portbState;			// prev value of button register
-volatile static uint8_t changes;			// 1 - if config changed, 0 - if not
+volatile static uint8_t changes;			// 1 - if local config changed, 0 - if not
 volatile static uint8_t timeout;
+
+typedef struct {
+	// 	uint8_t port;
+	// 	uint8_t dir;
+	uint8_t pin;	// pin number
+	uint8_t push;	// 0x00 - was not pushed, 0x01 - was pushed shortly, 0x02 - was pushed longly
+} button_t;
+
+static button_t buttons[numBtns];
 
 // DEV_UPPER menu state
 void channelLeft();
@@ -68,7 +78,7 @@ void volumeUp();
 void volumeDown();
 void goMenu1();
 void goSleep();
-void goLedOff()
+void goLedOff();
 
 // DEV_MENU1 menu state
 void searchLeft();
@@ -84,37 +94,33 @@ void goMenu2();
 
 int main(void)
 {
+	LCD_Init();
+	LCD_Write("AWSMTEK.COM", 11, 3, 0);
 	i2cInit();
-	volumeInit();
+	buttonInit();
+	
 	//EEPROM_init();
+	powerReduction();
 	//Custom= EEloadCustom();
 	//EEloadSettings(Custom);
-	buttonInit();
-	LCD_Init();
-	powerReduction();
+	volumeInit();
 	sei();
 	TEA5676sendConfig();
 	sleep();
+	LCD_Clear();
     while(1)
     {
-		//EEreadConfig();
-		
-		
 		if (changes)
 		{
 			TEA5676sendConfig();
 			timeout= LightOffTimeout;
 		}
 		
-		//TEA5676readConfig();
-		
 		//TODO: Display info
 		
 		if (timeout == 0) {
 			goLedOff();
 		}
-		
-		
     }
 }
 
@@ -136,6 +142,11 @@ void TEA5676sendConfig() {
 	i2cStop();
 }
 
+
+/************************************************************************/
+/* INITIAL					                                            */
+/************************************************************************/
+
 void volumeInit() {
 	BIT_clear(VOLreg, VOLpin); //VOL - output
 	BIT_clear(VOLport, VOLpin);  //VOL = 0 
@@ -146,21 +157,30 @@ void volumeInit() {
 }
 
 void buttonInit() {
-	BUTTONreg&= ~(1 << BB)& ~(1 << BU)& ~(1 << BL)& ~(1 << BC)& ~(1 << BR); // Buttons is inputs
-	BUTTONport|= (1 << BB)|(1 << BU)|(1 << BL)|(1 << BC)|(1 << BR); // with Pull-UP
+	buttons[0]= {(uint8_t)BB, 0x00};
+	buttons[1]= {(uint8_t)BR, 0x00};
+	buttons[2]= {(uint8_t)BC, 0x00};
+	buttons[3]= {(uint8_t)BL, 0x00};
+	buttons[4]= {(uint8_t)BU, 0x00};
+	
+	BUTTONreg&= ~(1 << buttons[0].pin)& ~(1 << buttons[1].pin)& ~(1 << buttons[2].pin)& ~(1 << buttons[3].pin)& ~(1 << buttons[4].pin); // Buttons is inputs
+	BUTTONport|= (1 << buttons[0].pin)|(1 << buttons[1].pin)|(1 << buttons[2].pin)|(1 << buttons[3].pin)|(1 << buttons[4].pin); // with Pull-UP
 	PCICR= 0b001; // Pin change on PCINT7..0 enabled
-	PCMSK0|= (1 << BB)|(1 << BU)|(1 << BL)|(1 << BC)|(1 << BR); // Unmask corresponding button's interrupts
+	PCMSK0|= (1 << buttons[0].pin)|(1 << buttons[1].pin)|(1 << buttons[2].pin)|(1 << buttons[3].pin)|(1 << buttons[4].pin); // Unmask corresponding button's interrupts
+	
 }
 
 void powerReduction() {
 	PRR|= (1 << PRSPI)|(1 << PRADC)|(1 << PRUSART0)|(1 << PRTIM1);
 }
 
+/************************************************************************/
+/* STATE CHANGING METHODS	                                            */
+/************************************************************************/
 
 void sleep() {
 	setLed(0);
-	//TEA5676readConfig();
-	//EEstoreConfig();
+	//EEstoreSettings();
 	//TEA5676goSleep();
 	SMCR|= (0b010 << SM0); // set sleepmode to powerdown
 	BIT_set(SMCR, SE);
@@ -170,7 +190,7 @@ void sleep() {
 void wakeUp() {
 	BIT_clear(SMCR, SE);
 	SMCR|= (0b011 << SM0); // set sleepmode to powersave
-	setLed(backlightLevel);
+	setLed(BacklightLevel);
 	//TEA5676goWork();
 	devState= DEV_UPPER;
 }
@@ -178,7 +198,7 @@ void wakeUp() {
 void goLedOff() {
 	setLed(0);
 	BIT_set(SMCR, SE);
-	__asm__ __volatile__ ("sleep");
+	__volatile__ __asm__ ("sleep");
 }
 
 void goMenu1() {
@@ -190,6 +210,10 @@ void setLed(uint8_t level) {
 	LCD_Backlight(level);
 }
 
+/************************************************************************/
+/* INTERRUPTS                                                           */
+/************************************************************************/
+
 ISR(PCINT0_vect) {
 
 	uint8_t portbNow= PORTB;
@@ -197,12 +221,11 @@ ISR(PCINT0_vect) {
 	uint8_t changedDown= ~(portbState)&(portbNow); // changes from 1 to 0
 	portbState= portbNow;
 	
-	if (devState == DEV_SLEEP)
-	{
+	if (devState == DEV_SLEEP) {
 		wakeUp();
 	}
-	else if(devState == DEV_LCD_OFF)
-		setLed(backlightLevel);
+	else if(devState == DEV_LCD_OFF) {
+		setLed(BacklightLevel);
 		devState= DEV_UPPER;
 	}
 	else {
