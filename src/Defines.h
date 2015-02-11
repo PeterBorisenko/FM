@@ -31,13 +31,4 @@
 #define CIRCLE(amt, low, high) ((amt)<(low)?(high):((amt)>(high)?(low):(amt)))
 #define ROUND(x) ((x)>=0?(long)((x)+0.5):(long)((x)-0.5))
 
-///флаги///
-#define LCD_ON 0
-#define MENU_ON 1
-#define ECONOMY 2
-#define INACTIVE 4
-
-
-
-
 #endif /* DEFINES_H_ */
