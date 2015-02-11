@@ -48,6 +48,7 @@ typedef enum{
 	DEV_LCD_OFF,
 	DEV_UPPER,
 	DEV_MENU1,
+	DEV_SEARCH,
 	DEV_MENU2
 	} state_t;
 
@@ -81,13 +82,21 @@ void goSleep();
 void goLedOff();
 
 // DEV_MENU1 menu state
+void selectUp();
+void selectDown();
+void valueMore();
+void valueLess();
+void goUpper();
+void goSearch();
+void goMenu2();
+
+// DEV_SEARCH menu state
 void searchLeft();
 void searchRight();
 void chToStoreUp();
 void chToStoreDown();
 void storeCh();
 void goUpper();
-void goMenu2();
 
 // DEV_MENU2 secret menu level (for debugging/tune)
 ///
