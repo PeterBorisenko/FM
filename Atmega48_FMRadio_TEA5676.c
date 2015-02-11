@@ -41,8 +41,8 @@ volatile static uint8_t LightOffTimeout= 255;  // Backlight timeout
 
 
 // Переменные для TEA5676
-Smessage_t Config;
-Rmessage_t Status;
+static Smessage_t Config;
+static Rmessage_t Status;
 
 
 // Global device state type and variable...
@@ -92,6 +92,22 @@ void goMenu2();
 // DEV_MENU2 secret menu level (for debugging/tune)
 ///
 
+
+// Other
+void volumeInit();
+void buttonInit();
+void EEPROM_init();
+void powerReduction();
+
+void setLed(uint8_t);
+void wakeUp();
+
+uint8_t EEloadCustom();
+void EEloadSettings(uint8_t);
+void TEA5676sendConfig();
+void TEA5676readConfig();
+
+
 int main(void)
 {
 	LCD_Init();
@@ -99,14 +115,14 @@ int main(void)
 	i2cInit();
 	buttonInit();
 	
-	//EEPROM_init();
+	EEPROM_init();
 	powerReduction();
-	//Custom= EEloadCustom();
-	//EEloadSettings(Custom);
+	Custom= EEloadCustom();
+	EEloadSettings(Custom);
 	volumeInit();
 	sei();
 	TEA5676sendConfig();
-	sleep();
+	goSleep();
 	LCD_Clear();
     while(1)
     {
@@ -178,7 +194,7 @@ void powerReduction() {
 /* STATE CHANGING METHODS	                                            */
 /************************************************************************/
 
-void sleep() {
+void goSleep() {
 	setLed(0);
 	//EEstoreSettings();
 	//TEA5676goSleep();
