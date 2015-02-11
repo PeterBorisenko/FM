@@ -38,12 +38,9 @@ volatile static uint8_t StoredChannels[30];
 volatile static uint8_t BacklightLevel= 128;
 volatile static uint8_t LightOffTimeout= 255;  // Backlight timeout
 
-
-
 // Переменные для TEA5676
 static Smessage_t Config;
 static Rmessage_t Status;
-
 
 // Global device state type and variable...
 typedef enum{
@@ -56,7 +53,9 @@ typedef enum{
 
 volatile static state_t devState;
 
+// Variables and constants for timing and buttons handling
 const numBtns= 5;
+const LongPushTime= 50;
 volatile static uint8_t timestamp[5];
 volatile static uint8_t portbState;			// prev value of button register
 volatile static uint8_t changes;			// 1 - if local config changed, 0 - if not
@@ -71,6 +70,7 @@ typedef struct {
 
 static button_t buttons[numBtns];
 
+// State change methods
 // DEV_UPPER menu state
 void channelLeft();
 void channelRight();
@@ -93,7 +93,7 @@ void goMenu2();
 ///
 
 
-// Other
+// Other methods
 void volumeInit();
 void buttonInit();
 void EEPROM_init();
@@ -130,6 +130,8 @@ int main(void)
 		{
 			TEA5676sendConfig();
 			timeout= LightOffTimeout;
+			changes= 0x00;
+			//TODO: State action
 		}
 		
 		//TODO: Display info
@@ -141,6 +143,7 @@ int main(void)
 }
 
 void TEA5676sendConfig() {
+	cli();
 	i2cStart();
 	while (!(TWCR&~(1 << TWINT))); // wait while TWIN==1 and TWSTA==0
 	i2cWrite(TEA_W); // send SLA_W
@@ -156,6 +159,7 @@ void TEA5676sendConfig() {
 	i2cWrite(Config.b5);
 	while (!(TWCR&~(1 << TWINT)));
 	i2cStop();
+	sei();
 }
 
 
@@ -245,17 +249,19 @@ ISR(PCINT0_vect) {
 		devState= DEV_UPPER;
 	}
 	else {
-		for (uint8_t i= numBtns; i >= 0; i--) { //TODO: Just change states and write active buttons
-			//if(BIT_read(changedDown, i)) {// from HI to LO
-			//	timestamp[i]= 0;
-			//if(BIT_read(changedUp, i))
-			//	if(timestamp[i] < longPushTime) {
-			//		pushLong(button); // buttons defined in the head of file
-			//  }
-			//  else {
-			//		push(button);
-			//	}
-			//}
+		for (uint8_t i= numBtns-1; i >= 0; i--) { //TODO: Just change states and write buttons[i].push
+			if(BIT_read(changedDown, buttons[i].pin)) {// from HI to LO
+				timestamp[i]= 0;
+			}
+			if(BIT_read(changedUp, i)) {
+				if(timestamp[i] < LongPushTime) {
+					buttons[i].push= 0x02; // buttons defined in the head of file
+				}
+				else {
+					buttons[i].push= 0x01;
+				}
+				changes= 0x01;
+			}
 		}
 	}
 	return;
