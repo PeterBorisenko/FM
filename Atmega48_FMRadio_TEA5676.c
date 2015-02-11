@@ -91,12 +91,13 @@ int main(void)
 	LCD_Init();
 	powerReduction();
 	sei();
+	TEA5676sendConfig();
+	sleep();
     while(1)
     {
 		//EEreadConfig();
 		
-		TEA5676sendConfig();
-		sleep();
+		
 		if (changes)
 		{
 			TEA5676sendConfig();
@@ -105,7 +106,11 @@ int main(void)
 		
 		//TEA5676readConfig();
 		
-		//TODO: Command sending func that sends only if anything changes 
+		//TODO: Display info
+		
+		if (timeout == 0) {
+			goLedOff();
+		}
 		
 		
     }
@@ -132,7 +137,6 @@ void TEA5676sendConfig() {
 void volumeInit() {
 	BIT_clear(VOLreg, VOLpin); //VOL - output
 	BIT_clear(VOLport, VOLpin);  //VOL = 0 
-	//TODO: PWM set up
 	TCCR0A|= (WGM00 << 0x03); // FAST PWM Mode
 	TCCR0A|= (1 << COM0B1); // Clear OC0B on compare match, set OC0B at BOTTOM (non-inverting PWM mode)
 	OCR0B= StoredVOL; // Volume 0
@@ -165,6 +169,7 @@ void wakeUp() {
 	BIT_clear(SMCR, SE);
 	SMCR|= (0b011 << SM0); // set sleepmode to powersave
 	setLed(backlightLevel);
+	//TEA5676goWork();
 	devState= DEV_UPPER;
 }
 
@@ -176,7 +181,7 @@ void goLedOff() {
 
 void goMenu1() {
 	BIT_clear(SMCR, SE);
-	
+	devState= DEV_MENU1;
 }
 
 void setLed(uint8_t level) {
@@ -186,8 +191,8 @@ void setLed(uint8_t level) {
 ISR(PCINT0_vect) {
 
 	uint8_t portbNow= PORTB;
-	uint8_t changedUp= (portbState)&~(portbNow);
-	uint8_t changedDown= ~(portbState)&(portbNow);
+	uint8_t changedUp= (portbState)&~(portbNow); // changes from 0 to 1
+	uint8_t changedDown= ~(portbState)&(portbNow); // changes from 1 to 0
 	portbState= portbNow;
 	
 	if (devState == DEV_SLEEP)
@@ -198,12 +203,27 @@ ISR(PCINT0_vect) {
 		setLed(backlightLevel);
 		devState= DEV_UPPER;
 	}
-	else if() {
+	else if(devState == DEV_UPPER) {
 		for (uint8_t i= numBtns; i >= 0; i--)
 		{
-			//if(BIT_read(changedUp, i)) {// from HI to LO //TODO: define rise/fall check
+			//if(BIT_read(changedDown, i)) {// from HI to LO //TODO: define rise/fall check
 			//	timestamp[i]= 0;
-			//if(BIT_read(changedDown, i))
+			//if(BIT_read(changedUp, i))
+			//	if(timestamp[i] < longPushTime) {
+			//		pushLong(button); // buttons defined in the head of file
+			//  }
+			//  else {
+			//		push(button);
+			//	}
+			//}
+		}
+	}
+	else if(devState == DEV_MENU1) {
+		for (uint8_t i= numBtns; i >= 0; i--)
+		{
+			//if(BIT_read(changedDown, i)) {// from HI to LO //TODO: define rise/fall check
+			//	timestamp[i]= 0;
+			//if(BIT_read(changedUp, i))
 			//	if(timestamp[i] < longPushTime) {
 			//		pushLong(button); // buttons defined in the head of file
 			//  }
@@ -226,7 +246,6 @@ ISR(TIMER2_OVF_vect) {
 	for (uint8_t i= 0; i < numBtns; i++)
 	{
 		timestamp[i]++;
-		timeout--;
 	}
-	
+	timeout--;
 }
