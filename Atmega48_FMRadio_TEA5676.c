@@ -11,6 +11,8 @@
 #include "src/LCD.h"
 #include "src/TEA5676_.h"
 
+
+
 // Определение выхода для управления громкостью
 #define VOLport PORTB
 #define VOLreg DDRB
@@ -31,7 +33,10 @@
 // Переменные из памяти
 volatile static uint8_t StoredVOL= 0;
 volatile static uint8_t StroredFREQ= 0x00;
-volatile static uint8_t backlightLevel;
+volatile static uint8_t backlightLevel= 128;
+volatile static uint8_t LIT_TMOUT= 255;  // Backlight timeout
+
+
 
 // Переменные для TEA5676
 Smessage_t Config;
@@ -51,7 +56,30 @@ volatile static state_t devState;
 
 volatile static uint8_t timestamp[5];
 volatile static const uint8_t numBtns= 5;
-volatile static uint8_t portbState;
+volatile static uint8_t portbState;			// prev value of button register
+volatile static uint8_t changes;			// 1 - if config changed, 0 - if not
+volatile static uint8_t timeout;
+
+// DEV_UPPER menu state
+void channelLeft();
+void channelRight();
+void volumeUp();
+void volumeDown();
+void goMenu1();
+void goSleep();
+void goLedOff()
+
+// DEV_MENU1 menu state
+void searchLeft();
+void searchRight();
+void chToStoreUp();
+void chToStoreDown();
+void storeCh();
+void goUpper();
+void goMenu2();
+
+// DEV_MENU2 secret menu level (for debugging/tune)
+///
 
 int main(void)
 {
@@ -69,7 +97,11 @@ int main(void)
 		
 		TEA5676sendConfig();
 		sleep();
-		//TODO: Menu handler
+		if (changes)
+		{
+			TEA5676sendConfig();
+			timeout= LIT_TMOUT;
+		}
 		
 		//TEA5676readConfig();
 		
@@ -118,26 +150,6 @@ void powerReduction() {
 	PRR|= (1 << PRSPI)|(1 << PRADC)|(1 << PRUSART0)|(1 << PRTIM1);
 }
 
-// DEV_UPPER menu state 
-void channelLeft();
-void channelRight();
-void volumeUp();
-void volumeDown();
-void goMenu1();
-void goSleep();
-void goLedOff()
-
-// DEV_MENU1 menu state
-void searchLeft();
-void searchRight();
-void chToStoreUp();
-void chToStoreDown();
-void storeCh();
-void goUpper();
-void goMenu2();
-
-// DEV_MENU2 secret menu level (for debugging/tune)
-
 
 void sleep() {
 	setLed(0);
@@ -173,6 +185,10 @@ void setLed(uint8_t level) {
 
 ISR(PCINT0_vect) {
 
+	uint8_t portbNow= PORTB;
+	uint8_t changedUp= (portbState)&~(portbNow);
+	uint8_t changedDown= ~(portbState)&(portbNow);
+	portbState= portbNow;
 	
 	if (devState == DEV_SLEEP)
 	{
@@ -183,30 +199,21 @@ ISR(PCINT0_vect) {
 		devState= DEV_UPPER;
 	}
 	else if() {
-		
+		for (uint8_t i= numBtns; i >= 0; i--)
+		{
+			//if(BIT_read(changedUp, i)) {// from HI to LO //TODO: define rise/fall check
+			//	timestamp[i]= 0;
+			//if(BIT_read(changedDown, i))
+			//	if(timestamp[i] < longPushTime) {
+			//		pushLong(button); // buttons defined in the head of file
+			//  }
+			//  else {
+			//		push(button);
+			//	}
+			//}
+		}
 	}
-	//TODO: Check which button pins was changed
-	
-	uint8_t portbNow= PORTB;
-	uint8_t changedUp= (portbState)&~(portbNow);
-	uint8_t changedDown= ~(portbState)&(portbNow);
-	portbState= portbNow;
-	
-	// //TODO: on each button do:
-	for (uint8_t i= numBtns; i >= 0; i--)
-	{
-		//if(BIT_read(changedUp, i)) {// from HI to LO //TODO: define rise/fall check
-		//	timestamp[i]= 0;
-		//if(BIT_read(changedDown, i))
-		//	if(timestamp[i] < longPushTime) {
-		//		pushLong(button); // buttons defined in the head of file
-		//  }
-		//  else {
-		//		push(button);
-		//	}
-		//}
-	}
-	
+
 	return;
 }
 
@@ -219,6 +226,7 @@ ISR(TIMER2_OVF_vect) {
 	for (uint8_t i= 0; i < numBtns; i++)
 	{
 		timestamp[i]++;
+		timeout--;
 	}
 	
 }
