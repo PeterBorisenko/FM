@@ -31,34 +31,58 @@
 // Переменные из памяти
 volatile static uint8_t StoredVOL= 0;
 volatile static uint8_t StroredFREQ= 0x00;
+volatile static uint8_t backlightLevel;
 
 // Переменные для TEA5676
 Smessage_t Config;
 Rmessage_t Status;
 
+// Global device state type and variable...
+typedef enum{
+	DEV_SLEEP,
+	DEV_LCD_OFF,
+	DEV_UPPER,
+	DEV_MENU1,
+	DEV_MENU2
+	} state_t;
+
+volatile static state_t devState;
+
+
+volatile static uint8_t timestamp[5];
+volatile static const uint8_t numBtns= 5;
+volatile static uint8_t portbState;
+
 int main(void)
 {
+	
 	i2cInit();
 	volumeInit();
 	//EEPROM_init();
 	buttonInit();
 	LCD_Init();
-	TEA5676Init();
-	
 	powerReduction();
 	sei();
     while(1)
     {
+		//EEreadConfig();
+		
+		TEA5676sendConfig();
+		sleep();
 		//TODO: Menu handler
 		
+		//TEA5676readConfig();
+		
 		//TODO: Command sending func that sends only if anything changes 
+		
+		
     }
 }
 
-void TEA5676Init() {
+void TEA5676sendConfig() {
 	i2cStart();
 	while (!(TWCR&~(1 << TWINT))); // wait while TWIN==1 and TWSTA==0
-	i2cWrite(&TEA_W); // send SLA_W
+	i2cWrite(TEA_W); // send SLA_W
 	while (!(TWCR&~(1 << TWINT)));
 	i2cWrite(Config.b1);
 	while (!(TWCR&~(1 << TWINT)));
@@ -94,20 +118,107 @@ void powerReduction() {
 	PRR|= (1 << PRSPI)|(1 << PRADC)|(1 << PRUSART0)|(1 << PRTIM1);
 }
 
+// DEV_UPPER menu state 
+void channelLeft();
+void channelRight();
+void volumeUp();
+void volumeDown();
+void goMenu1();
+void goSleep();
+void goLedOff()
+
+// DEV_MENU1 menu state
+void searchLeft();
+void searchRight();
+void chToStoreUp();
+void chToStoreDown();
+void storeCh();
+void goUpper();
+void goMenu2();
+
+// DEV_MENU2 secret menu level (for debugging/tune)
+
+
 void sleep() {
-	
+	setLed(0);
+	//TEA5676readConfig();
+	//EEstoreConfig();
+	//TEA5676goSleep();
+	SMCR|= (0b010 << SM0); // set sleepmode to powerdown
+	BIT_set(SMCR, SE);
+	__asm__ __volatile__ ("sleep");
 }
 
 void wakeUp() {
+	BIT_clear(SMCR, SE);
+	SMCR|= (0b011 << SM0); // set sleepmode to powersave
+	setLed(backlightLevel);
+	devState= DEV_UPPER;
+}
+
+void goLedOff() {
+	setLed(0);
+	BIT_set(SMCR, SE);
+	__asm__ __volatile__ ("sleep");
+}
+
+void goMenu1() {
+	BIT_clear(SMCR, SE);
 	
 }
 
+void setLed(uint8_t level) {
+	LCD_Backlight(level);
+}
+
 ISR(PCINT0_vect) {
-	//TODO: Button handler
+
+	
+	if (devState == DEV_SLEEP)
+	{
+		wakeUp();
+	}
+	else if(devState == DEV_LCD_OFF)
+		setLed(backlightLevel);
+		devState= DEV_UPPER;
+	}
+	else if() {
+		
+	}
+	//TODO: Check which button pins was changed
+	
+	uint8_t portbNow= PORTB;
+	uint8_t changedUp= (portbState)&~(portbNow);
+	uint8_t changedDown= ~(portbState)&(portbNow);
+	portbState= portbNow;
+	
+	// //TODO: on each button do:
+	for (uint8_t i= numBtns; i >= 0; i--)
+	{
+		//if(BIT_read(changedUp, i)) {// from HI to LO //TODO: define rise/fall check
+		//	timestamp[i]= 0;
+		//if(BIT_read(changedDown, i))
+		//	if(timestamp[i] < longPushTime) {
+		//		pushLong(button); // buttons defined in the head of file
+		//  }
+		//  else {
+		//		push(button);
+		//	}
+		//}
+	}
+	
 	return;
 }
 
 ISR(TWI_vect) {
 	i2cHandler();
 	return;
+}
+
+ISR(TIMER2_OVF_vect) {
+	for (uint8_t i= 0; i < numBtns; i++)
+	{
+		timestamp[i]++;
+	}
+	
 }
