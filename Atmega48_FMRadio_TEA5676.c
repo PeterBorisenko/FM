@@ -7,6 +7,8 @@
 #define F_CPU 8000000UL
 
 #include <avr/io.h>
+#include <avr/eeprom.h>
+#include <avr/sleep.h>
 #include "src/Defines.h"
 #include "src/LCD.h"
 #include "src/TEA5676_.h"
@@ -30,11 +32,16 @@
 // Прескалер для ШИМ
 #define TIM0PSC 0x04
 
+typedef struct {
+	uint8_t pll_hi:6;
+	uint8_t pll_lo:8;
+	} channel_t;
+
 // Переменные из памяти
-volatile static uint8_t Custom;				// if custom == 0 - load factory defaults, if custom == 1 - load stored config 
+volatile static bit Custom;				// if custom == 0 - load factory defaults, if custom == 1 - load stored config 
 volatile static uint8_t StoredVOL= 0;
 volatile static uint8_t StroredFREQ= 0x00;
-volatile static uint8_t StoredChannels[30];
+volatile static channel_t StoredChannels[30];
 volatile static uint8_t BacklightLevel= 128;
 volatile static uint8_t LightOffTimeout= 255;  // Backlight timeout
 
@@ -55,11 +62,11 @@ typedef enum{
 volatile static state_t devState;
 
 // Variables and constants for timing and buttons handling
-const numBtns= 5;
-const LongPushTime= 50;
+#define numBtns 5
+const uint8_t LongPushTime= 50;
 volatile static uint8_t timestamp[5];
 volatile static uint8_t portbState;			// prev value of button register
-volatile static uint8_t changes;			// 1 - if local config changed, 0 - if not
+volatile static bit changes;			// 1 - if local config changed, 0 - if not
 volatile static uint8_t timeout;
 
 typedef struct {
@@ -113,8 +120,13 @@ void wakeUp();
 
 uint8_t EEloadCustom();
 void EEloadSettings(uint8_t);
+void EEstoreSettings();
 void TEA5676sendConfig();
 void TEA5676readConfig();
+void TEA5676goSleep();
+void TEA5676goWork();
+void TEA5676setFrequency();
+void TEA5676startSearch(uint8_t);
 
 
 int main(void)
@@ -126,8 +138,8 @@ int main(void)
 	
 	EEPROM_init();
 	powerReduction();
-	Custom= EEloadCustom();
-	EEloadSettings(Custom);
+	Custom.val= EEloadCustom();
+	EEloadSettings(Custom.val);
 	volumeInit();
 	sei();
 	TEA5676sendConfig();
@@ -135,11 +147,11 @@ int main(void)
 	LCD_Clear();
     while(1)
     {
-		if (changes)
+		if (changes.val)
 		{
 			TEA5676sendConfig();
 			timeout= LightOffTimeout;
-			changes= 0x00;
+			changes.val= 0x0;
 			//TODO: State action
 		}
 		
@@ -186,11 +198,11 @@ void volumeInit() {
 }
 
 void buttonInit() {
-	buttons[0]= {(uint8_t)BB, 0x00};
-	buttons[1]= {(uint8_t)BR, 0x00};
-	buttons[2]= {(uint8_t)BC, 0x00};
-	buttons[3]= {(uint8_t)BL, 0x00};
-	buttons[4]= {(uint8_t)BU, 0x00};
+	buttons[0].pin= (uint8_t)BB;
+	buttons[1].pin= (uint8_t)BR;
+	buttons[2].pin= (uint8_t)BC;
+	buttons[3].pin= (uint8_t)BL;
+	buttons[4].pin= (uint8_t)BU;
 	
 	BUTTONreg&= ~(1 << buttons[0].pin)& ~(1 << buttons[1].pin)& ~(1 << buttons[2].pin)& ~(1 << buttons[3].pin)& ~(1 << buttons[4].pin); // Buttons is inputs
 	BUTTONport|= (1 << buttons[0].pin)|(1 << buttons[1].pin)|(1 << buttons[2].pin)|(1 << buttons[3].pin)|(1 << buttons[4].pin); // with Pull-UP
@@ -209,25 +221,32 @@ void powerReduction() {
 
 void goSleep() {
 	setLed(0);
-	//EEstoreSettings();
-	//TEA5676goSleep();
-	SMCR|= (0b010 << SM0); // set sleepmode to powerdown
-	BIT_set(SMCR, SE);
-	__asm__ __volatile__ ("sleep");
+	EEstoreSettings();
+	TEA5676goSleep();
+	//SMCR|= (0b010 << SM0); // set sleepmode to powerdown
+	set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+	//BIT_set(SMCR, SE);
+	//__asm__ __volatile__ ("sleep" "\n\t"::);
+	sleep_enable();
+	sleep_cpu();
 }
 
 void wakeUp() {
-	BIT_clear(SMCR, SE);
-	SMCR|= (0b011 << SM0); // set sleepmode to powersave
+	//BIT_clear(SMCR, SE);
+	//SMCR|= (0b011 << SM0); // set sleepmode to powersave
+	sleep_disable();
+	set_sleep_mode(SLEEP_MODE_PWR_SAVE);
 	setLed(BacklightLevel);
-	//TEA5676goWork();
+	TEA5676goWork();
 	devState= DEV_UPPER;
 }
 
 void goLedOff() {
 	setLed(0);
-	BIT_set(SMCR, SE);
-	__volatile__ __asm__ ("sleep");
+	//BIT_set(SMCR, SE);
+	//__volatile__ __asm__ ("sleep" "\n\t"::);
+	sleep_enable();
+	sleep_cpu();
 }
 
 void goMenu1() {
@@ -269,7 +288,7 @@ ISR(PCINT0_vect) {
 				else {
 					buttons[i].push= 0x01;
 				}
-				changes= 0x01;
+				changes.val= 0x1;
 			}
 		}
 	}
