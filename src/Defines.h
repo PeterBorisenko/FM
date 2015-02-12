@@ -31,4 +31,8 @@
 #define CIRCLE(amt, low, high) ((amt)<(low)?(high):((amt)>(high)?(low):(amt)))
 #define ROUND(x) ((x)>=0?(long)((x)+0.5):(long)((x)-0.5))
 
+typedef struct {
+	uint8_t val:1;
+}bit;
+
 #endif /* DEFINES_H_ */
